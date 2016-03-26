@@ -1,0 +1,146 @@
+---
+title: "Practical Machine Learning"
+author: "Ramesh P"
+date: "March 26, 2016"
+output: html_document
+---
+
+## Background Introduction
+
+Prediction Assignment Writeup
+
+“Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement ??? a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).”
+
+## Data Sources
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project comes from this original source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+The next step is loading the dataset from the URL provided above. The training dataset is then partinioned in 2 to create a Training set (70% of the data) for the modeling process and a Test set (with the remaining 30%) for the validations. The testing dataset is not changed and will only be used for the quiz results generation.
+
+
+```{r, warning=FALSE,comment=FALSE,message=FALSE}
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+set.seed(12345)
+
+# set the URL for the download
+UrlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+UrlTest  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# download the datasets
+training <- read.csv(url(UrlTrain))
+testing  <- read.csv(url(UrlTest))
+
+# create a partition with the training dataset 
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+dim(TrainSet)
+dim(TestSet)
+
+```
+
+Both created datasets have 160 variables. Variables will have NA and that need to be removed first. The Near Zero variance 
+variables are also removed and the ID variables as well.
+
+```{r, warning=FALSE,comment=FALSE,message=FALSE}
+# remove variables with Nearly Zero Variance
+Nonzero <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -Nonzero]
+TestSet  <- TestSet[, -Nonzero]
+dim(TrainSet)
+dim(TestSet)
+
+# remove variables that are mostly NA
+RVNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, RVNA==FALSE]
+TestSet  <- TestSet[, RVNA==FALSE]
+dim(TrainSet)
+dim(TestSet)
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+dim(TrainSet)
+dim(TestSet)
+
+
+```
+
+
+## Prediction Model Building
+
+Two methods will be applied to model the regressions (in the Train dataset) and the best one (with higher accuracy when applied to the Test dataset) 
+will be used for the quiz predictions. The methods are: Random Forests and Decision Tree, as described below. Based on the accuracy I might go for another method.
+A Confusion Matrix is plotted at the end of each analysis to better visualize the accuracy of the models.
+
+```{r, warning=FALSE,comment=FALSE,message=FALSE}
+
+# model fit
+set.seed(12345)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf",
+                          trControl=controlRF)
+modFitRandForest$finalModel
+
+
+# prediction on Test dataset
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, TestSet$classe)
+confMatRandForest
+
+
+# plot matrix results
+plot(confMatRandForest$table, col = confMatRandForest$byClass, 
+     main = paste("Random Forest - Accuracy =",
+                  round(confMatRandForest$overall['Accuracy'], 4)))
+
+```
+
+## Decision Trees
+
+```{r, warning=FALSE,comment=FALSE,message=FALSE}
+# model fit
+set.seed(12345)
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+
+
+# prediction on Test dataset
+predictDecTree <- predict(modFitDecTree, newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree, TestSet$classe)
+confMatDecTree
+
+# plot matrix results
+plot(confMatDecTree$table, col = confMatDecTree$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(confMatDecTree$overall['Accuracy'], 4)))
+
+```
+
+## Applying the Model to the Test Data
+The accuracy of the 2 regression modeling methods above are:
+
+Random Forest : 0.9963
+Decision Tree : 0.7368
+
+In that case, the Random Forest model will be applied to predict the 20 quiz results (testing dataset) as shown below.
+
+```{r, warning=FALSE,comment=FALSE,message=FALSE}
+
+predictTEST <- predict(modFitRandForest, newdata=testing)
+predictTEST
+
+```
+
